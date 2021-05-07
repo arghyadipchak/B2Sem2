@@ -1,0 +1,189 @@
+\documentclass[12pt,english]{article}
+\usepackage[a4paper,left=1cm,right=1cm,top=1cm,bottom=2cm,%
+            footskip=1cm]{geometry}
+
+\usepackage{color}
+\usepackage{fancyvrb}
+\usepackage{Sweave}
+\definecolor{incolor}{RGB}{45,61,81}
+\definecolor{outcolor}{RGB}{208,145,1}
+\DefineVerbatimEnvironment{Sinput}{Verbatim}{formatcom=\color{incolor}}
+\DefineVerbatimEnvironment{Soutput}{Verbatim}{formatcom=\color{outcolor}}
+\DefineVerbatimEnvironment{Scode}{Verbatim}{formatcom=\color{incolor}}
+\DefineVerbatimEnvironment{Sin}{Verbatim}{formatcom=\color{incolor}}
+\DefineVerbatimEnvironment{Sout}{Verbatim}{formatcom=\color{outcolor}}
+
+\newlength{\fancyvrbtopsep}
+\newlength{\fancyvrbpartopsep}
+\makeatletter
+\FV@AddToHook{\FV@ListParameterHook}{\topsep=\fancyvrbtopsep\partopsep=\fancyvrbpartopsep}
+\makeatother
+
+\setlength{\parindent}{.25cm}
+\setlength{\parskip}{0cm}
+\setlength{\fancyvrbtopsep}{2mm}
+\setlength{\fancyvrbpartopsep}{-1mm}
+
+\title{\vspace{-2em}Computer Science II (Homework 2)\vspace{-0.75em}}
+\author{Arghyadip Chakraborty (bmat1907)}
+\date{}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+
+\maketitle
+{\vspace{-1em}}
+
+1. At first lets create a 10x10 symmetric matrix where are entries are random uniform numbers between 0 and 5:
+<<echo=T>>=
+A = matrix(runif(100, min=0, max=5), nrow=10, ncol=10)
+A = (A+t(A))/2
+print(A)
+@
+
+\vspace{.4cm}
+Now we write the function to find eigenvalues and eigenvectors using classical Jacobi Method:
+<<echo=T>>=
+clJ <- function(A, tol=1e-3){
+  n = nrow(A)
+  if(n<=1) return(A)
+  lt = which(lower.tri(A))
+  E = diag(n)
+  repeat{
+    k = lt[which.max(abs(A[lt]))]
+    p = (k-1)%%n + 1  #floor(1 + (k-2)/(n+1))
+    q = (k-1)%/%n + 1 #k - n*(j-1)
+    if(abs(A[p,q])<tol) break
+    
+    Ap = A[,p]
+    Aq = A[,q]
+    phi = 0.5*atan2(2*Ap[q], Aq[q] - Ap[p])
+    c = cos(phi)
+    s = sin(phi)
+    
+    A[p, ] <- A[, p] <- c*Ap - s*Aq
+    A[q, ] <- A[, q] <- s*Ap + c*Aq
+    A[p,q] <- A[q,p] <- 0
+    A[p,p] <- c^2*Ap[p] - 2*s*c*Ap[q] + s^2*Aq[q]
+    A[q,q] <- s^2*Ap[p] + 2*s*c*Ap[q] + c^2*Aq[q]
+    
+    Ep <- E[,p]
+    Eq <- E[,q]
+    E[,p] <- c*Ep - s*Eq
+    E[,q] <- s*Ep + c*Eq
+  }
+  return(list(values=diag(A), vectors=E))
+}
+@
+
+\vspace{.4cm}
+Now lets find the eigenvalues and eigenvectors of A using classical Jacobi Method \& the inbuilt function in R and compare them:
+<<echo=T>>=
+eigJ = clJ(A)
+eig = eigen(A)
+print(eigJ$values)
+print(eig$values)
+print(eigJ$vectors)
+print(eig$vectors)
+@
+
+\vspace{.4cm}
+So the eigenvalues and eigenvectors we get using our function is very very close to the ones we get using the builtin function, the differences are very negligible. Lets find the relative error of the eigenvalues $\left(\frac{||\Delta \lambda_i||_2}{||\lambda_i||_2}\right)$ and the eigenvectors $\left(\frac{||\Delta v_i||_2}{||v_i||_2}\right)$:
+<<echo=T>>=
+print(abs((eigJ$values - eig$values)/eig$values))
+print(sqrt(colMeans((eigJ$vectors - eig$vectors)^2)/colMeans(eig$vectors^2)))
+@
+So the errors are really low and hence our function works perfectly.
+
+\newpage
+
+2. Functions to find integral of $f$ from $a$ to $b$ using:\\
+(i) Rectangle Rule:
+<<echo=T>>=
+library(Deriv)
+Mn <- function(f, a, b, n, pos=F){
+  df <- f
+  for(i in 1:n) df <- Deriv(df, 'x')
+  mdf <- function(x) abs(df(x))
+  if(pos) return(optimize(mdf, lower=a, upper=b, maximum=T)$maximum)
+  return(optimize(mdf, lower=a, upper=b, maximum=T)$objective)
+}
+rectInt <- function(f, a, b, tol=1e-7){
+  M = Mn(f, a, b, 1)
+  n = ceiling(M*((b-a)^2)/tol)
+  sep = (b-a)/n
+  I = 0
+  for(i in 1:n)
+    I = I + f(a + i*sep)*sep
+  return(I)
+}
+@
+
+(ii) Midpoint Rule:
+<<echo=T>>=
+midpInt <- function(f, a, b, tol=1e-7){
+  M = Mn(f, a, b, 1)
+  n = ceiling(M*((b-a)^2)/(2*tol))
+  sep = (b-a)/n
+  I = 0
+  for(i in 1:n)
+    I = I + f(a + (i-.5)*sep)*sep
+  return(I)
+}
+@
+
+(iii) Trapezoid Rule:
+<<echo=T>>=
+trapInt <- function(f, a, b, tol=1e-7){
+  M = Mn(f, a, b, 2)
+  n = ceiling((M*((b-a)^3)/(6*tol))^.5)
+  sep = (b-a)/n
+  I = 0
+  for(i in 1:n)
+    I = I + (f(a + (i-1)*sep) + f(a + i*sep))/2*sep
+  return(I)
+}
+@
+
+(iv) Simpson's Rule:
+<<echo=T>>=
+simpInt <- function(f, a, b, tol=1e-7){
+  M = Mn(f, a, b, 3)
+  n = ceiling((M*((b-a)^4)/(98*tol))^(1/3))
+  sep = (b-a)/n
+  I = 0
+  for(i in 1:n)
+    I = I + (f(a + (i-1)*sep) + 4*f(a + (i-.5)*sep) +f(a + i*sep))/6*sep
+  return(I)
+}
+@
+
+$\ast$ Function to find integral using the above 4 rules:
+<<echo=T>>=
+find_intg <- function(f, a, b, tol=1e-7){
+  if(Mn(f, a, b, 5, pos=T)==0){
+    stop("f is not 5 times differentiable")
+    return(NULL)
+  }
+  print(paste("Rectangle Rule:", rectInt(f, a, b, tol)))
+  print(paste("Midpoint Rule :", midpInt(f, a, b, tol)))
+  print(paste("Trapezoid Rule:", trapInt(f, a, b, tol)))
+  print(paste("Simpson's Rule:", simpInt(f, a, b, tol)))
+}
+@
+
+\vspace{.35cm}
+Now lets find $\int_{\frac{1}{4}}^{\frac{3}{4}} (1 - x^2)^{\frac{3}{2}}$:
+<<echo=T>>=
+f <- function(x) (1 - x^2)^1.5
+find_intg(f, 1/4, 3/4, 1e-7)
+@
+
+\vspace{.35cm}
+Now lets find $\int_{-1}^1 \sin(x^2)$:
+<<echo=T>>=
+f <- function(x) sin(x^2)
+find_intg(f, -1, 1, 1e-6)
+@
+
+\end{document}
